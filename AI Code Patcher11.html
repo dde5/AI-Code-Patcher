@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Patcher v11 - 最終穩定版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --editor-bg: #2d2d2d; --text-color: #d4d4d4; --line-number-color: #858585;
+            --added-bg: rgba(40, 167, 69, 0.15); --removed-bg: rgba(220, 53, 69, 0.15);
+            --added-char-bg: rgba(40, 167, 69, 0.4); --removed-char-bg: rgba(220, 53, 69, 0.4);
+            --context-bg: rgba(80, 80, 80, 0.15);
+            --active-diff-border: #007bff; --nav-height: 55px; --selection-bg: rgba(0, 123, 255, 0.4);
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; padding-top: calc(var(--nav-height) + 20px); background-color: #f0f2f5; color: #333; }
+        nav { position: fixed; top: 0; left: 0; width: 100%; height: var(--nav-height); background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: flex; justify-content: center; align-items: center; gap: 30px; z-index: 1000; }
+        nav a { color: #0056b3; text-decoration: none; font-size: 16px; font-weight: 500; padding: 8px 16px; border-radius: 6px; }
+        .container { max-width: 1800px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 20px; }
+        .main-controls { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px; }
+        .main-controls button { padding: 12px 25px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; }
+        #compareBtn { background-color: #28a745; color: white; } #clearBtn { background-color: #dc3545; color: white; }
+        .toggle-switch-group { display: flex; gap: 15px; }
+        .toggle-switch { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; position: relative; }
+        .toggle-switch .tooltip { visibility: hidden; width: 180px; background-color: #555; color: #fff; text-align: center; border-radius: 6px; padding: 5px; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -90px; opacity: 0; transition: opacity 0.3s; font-size: 12px; }
+        .toggle-switch:hover .tooltip { visibility: visible; opacity: 1; }
+        .toggle-switch label { font-size: 14px; color: #333; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #2196F3; } input:checked + .slider:before { transform: translateX(20px); }
+        .panels { display: flex; gap: 20px; justify-content: space-between; }
+        .panel { flex: 1; display: flex; flex-direction: column; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
+        .panel-header { padding: 10px 15px; background-color: #f7f7f7; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+        .panel-header button { padding: 5px 10px; font-size: 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background-color: #fff; }
+        .editor-container { position: relative; display: flex; height: 55vh; background-color: var(--editor-bg); }
+        .line-numbers { width: 50px; padding: 10px 0; text-align: right; padding-right: 10px; font: 14px/1.5 'Courier New', Courier, monospace; color: var(--line-number-color); user-select: none; overflow-y: hidden; z-index: 2; }
+        .line-numbers span { display: block; }
+        textarea, .highlight-pre { position: absolute; top: 0; left: 50px; right: 0; bottom: 0; margin: 0; padding: 10px; font: 14px/1.5 'Courier New', Courier, monospace; border: none; resize: none; overflow: auto; white-space: pre; }
+        textarea { z-index: 1; color: transparent; background: transparent; caret-color: white; }
+        textarea::selection { color: transparent; background-color: var(--selection-bg); }
+        .highlight-pre { z-index: 0; user-select: none; }
+        .highlight-pre code { padding: 0; margin: 0; background: none; }
+        .diff-container { flex-grow: 1; padding: 10px 0 10px 10px; font: 14px/1.5 'Courier New', Courier, monospace; white-space: pre; overflow: auto; background-color: var(--editor-bg); counter-reset: line; min-height: 300px; }
+        .diff-line { display: block; min-height: 1.5em; position: relative; padding-left: 50px; }
+        .diff-line::before { counter-increment: line; content: counter(line); position: absolute; left: 0; top: 0; width: 40px; text-align: right; padding-right: 10px; color: var(--line-number-color); user-select: none; }
+        .diff-line.diff-added { background-color: var(--added-bg); }
+        .diff-line.diff-removed { background-color: var(--removed-bg); }
+        .diff-line.diff-context { background-color: var(--context-bg); }
+        .diff-line > code { display: inline-block; }
+        .char-added { background-color: var(--added-char-bg); border-radius: 2px; }
+        .char-removed { background-color: var(--removed-char-bg); border-radius: 2px; }
+        .diff-hunk-separator { text-align: center; color: var(--line-number-color); background-color: rgba(0,0,0,0.2); margin: 10px 0; font-family: monospace; user-select: none; }
+        .diff-active { outline: 2px solid var(--active-diff-border); outline-offset: -2px; }
+        .diff-nav { display: none; gap: 10px; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #333; color: white; padding: 10px 20px; border-radius: 5px; opacity: 0; transition: opacity 0.5s; visibility: hidden; z-index: 1001; }
+        .toast.show { opacity: 1; visibility: visible; }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="#main-controls-anchor">功能操作區</a>
+        <a href="#result-section-anchor">結果預覽區</a>
+    </nav>
+    <div class="container">
+        <header><h1>🤖 AI Code Patcher v11</h1><p class="subtitle">【最終穩定版】重構並驗證所有功能，確保穩定可靠。</p></header>
+        <span id="main-controls-anchor" class="anchor"></span>
+        <div class="main-controls">
+            <button id="compareBtn">手動比對</button>
+            <div class="toggle-switch-group">
+                <div class="toggle-switch"><label for="smartPatchMode">智慧補丁</label><label class="switch"><input type="checkbox" id="smartPatchMode" checked><span class="slider"></span></label><span class="tooltip">啟用後，會自動尋找「原始碼」中的相似片段來應用修改。</span></div>
+                <div class="toggle-switch"><label for="autoCompareMode">自動比對</label><label class="switch"><input type="checkbox" id="autoCompareMode" checked><span class="slider"></span></label><span class="tooltip">啟用後，停止輸入 500ms 即會自動觸發比對。</span></div>
+            </div>
+            <button id="clearBtn">全部清空</button>
+        </div>
+        <div class="panels">
+            <div class="panel">
+                <div class="panel-header"><h2>1. 原始碼</h2><button id="uploadOriginalBtn">上傳檔案</button></div>
+                <div class="editor-container"><input type="file" id="originalFileInput"><div id="originalLineNumbers" class="line-numbers"></div><textarea id="originalCode" spellcheck="false"></textarea><pre id="originalHighlight" class="highlight-pre" aria-hidden="true"><code></code></pre></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><h2>2. AI 修正建議</h2><button id="uploadPatchBtn">上傳檔案</button></div>
+                <div class="editor-container"><input type="file" id="patchFileInput"><div id="patchLineNumbers" class="line-numbers"></div><textarea id="patchCode" spellcheck="false"></textarea><pre id="patchHighlight" class="highlight-pre" aria-hidden="true"><code></code></pre></div>
+            </div>
+        </div>
+        <span id="result-section-anchor" class="anchor"></span>
+        <div class="result-panel">
+            <div class="panel">
+                <div class="panel-header"><h2>3. 結果預覽</h2><div class="diff-nav" id="diffNav"><button id="prevDiff"><</button><span id="diffCounter">0 / 0</span><button id="nextDiff">></button></div></div>
+                <div id="diff-output" class="diff-container hljs"></div>
+            </div>
+            <div class="result-controls" id="resultControls" style="display: none;"><button id="applyBtn">✅ 應用修改</button><button id="copyBtn">📋 複製結果</button><button id="downloadBtn">💾 下載檔案</button></div>
+        </div>
+    </div>
+    <div id="toast" class="toast"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- SELECTORS (Robust and Centralized) ---
+        const get = (id) => document.getElementById(id);
+        const elements = {
+            originalCode: get('originalCode'), patchCode: get('patchCode'),
+            originalHighlight: get('originalHighlight').querySelector('code'), patchHighlight: get('patchHighlight').querySelector('code'),
+            originalLineNumbers: get('originalLineNumbers'), patchLineNumbers: get('patchLineNumbers'),
+            diffOutput: get('diff-output'),
+            smartPatchMode: get('smartPatchMode'), autoCompareMode: get('autoCompareMode'),
+            compareBtn: get('compareBtn'), clearBtn: get('clearBtn'), applyBtn: get('applyBtn'),
+            copyBtn: get('copyBtn'), downloadBtn: get('downloadBtn'),
+            prevDiffBtn: get('prevDiff'), nextDiffBtn: get('nextDiff'),
+            resultControls: get('resultControls'), diffNav: get('diffNav'), diffCounter: get('diffCounter'),
+            originalFileInput: get('originalFileInput'), patchFileInput: get('patchFileInput'),
+            uploadOriginalBtn: get('uploadOriginalBtn'), uploadPatchBtn: get('uploadPatchBtn'),
+            toast: get('toast')
+        };
+
+        // --- STATE ---
+        let mergedResult = '';
+        let diffChangeGroups = [];
+        let currentChangeGroupIndex = -1;
+        let autoCompareTimeout;
+        const SIMILARITY_THRESHOLD_RATIO = 0.3;
+        const CONTEXT_LINES = 3;
+
+        // --- CORE LOGIC ---
+        function runCompare() {
+            try {
+                elements.smartPatchMode.checked ? handleSmartCompare() : handleStandardCompare();
+            } catch (error) {
+                console.error("Comparison failed:", error);
+                showToast("比對時發生錯誤，請檢查主控台。");
+            }
+        }
+
+        function handleStandardCompare() {
+            const diff = Diff.diffLines(elements.originalCode.value, elements.patchCode.value, { newlineIsToken: true });
+            renderDiff(diff);
+        }
+
+        function handleSmartCompare() {
+            const originalText = elements.originalCode.value, patchText = elements.patchCode.value;
+            if (!patchText.trim()) { showToast('智慧模式需要「AI 修正建議」中有內容。'); return; }
+            if (!originalText.trim()) { handleStandardCompare(); return; }
+
+            const originalLines = originalText.split('\n'), patchLines = patchText.split('\n');
+            const bestMatch = findBestMatchByLine(originalLines, patchLines);
+            
+            if (bestMatch.score > 0 && bestMatch.score / patchLines.length >= SIMILARITY_THRESHOLD_RATIO) {
+                const { index: startIndex, originalBlockLines } = bestMatch;
+                const endIndex = startIndex + originalBlockLines.length;
+                const beforeText = originalLines.slice(0, startIndex).join('\n') + (startIndex > 0 ? '\n' : '');
+                const afterText = (endIndex < originalLines.length ? '\n' : '') + originalLines.slice(endIndex).join('\n');
+                const blockDiff = Diff.diffLines(originalBlockLines.join('\n'), patchLines.join('\n'), { newlineIsToken: true });
+                const finalDiff = [{ value: beforeText }, ...blockDiff, { value: afterText }];
+                renderDiff(finalDiff, `智慧模式：在第 ${startIndex + 1} 行附近找到匹配。`);
+            } else {
+                const finalDiff = [{ value: originalText + (originalText ? '\n\n' : '') }, { value: patchText, added: true }];
+                renderDiff(finalDiff, "智慧模式：未找到匹配項，附加在結尾。");
+            }
+        }
+
+        function findBestMatchByLine(originalLines, patchLines) {
+            let bestMatch = { index: -1, score: -1, originalBlockLines: [] };
+            const patchLength = patchLines.length; if (patchLength === 0) return bestMatch;
+            for (let i = 0; i <= originalLines.length - patchLength; i++) {
+                const windowLines = originalLines.slice(i, i + patchLength); let currentScore = 0;
+                for (let j = 0; j < patchLength; j++) { if (windowLines[j].trim() === patchLines[j].trim() && windowLines[j].trim() !== '') { currentScore++; } }
+                if (currentScore > bestMatch.score) { bestMatch = { index: i, score: currentScore, originalBlockLines: windowLines }; }
+            } return bestMatch;
+        }
+
+        // --- UI & RENDERING ---
+        function renderDiff(diff, toastMessage) {
+            mergedResult = '';
+            diff.forEach(part => { if (!part.removed) mergedResult += part.value; });
+
+            const fragment = document.createDocumentFragment();
+            const lines = preprocessDiffToLines(diff);
+            
+            // Do not generate hunks if in smart mode and no match was found (append mode)
+            const noChanges = lines.every(line => line.type === 'common');
+            const isAppendMode = elements.smartPatchMode.checked && lines.some(l => l.type === 'added') && !lines.some(l => l.type === 'removed');
+
+            if (noChanges || isAppendMode) {
+                 lines.forEach(line => appendLinesSimple(line.text, line.type, fragment));
+            } else {
+                const hunks = buildHunks(lines, CONTEXT_LINES);
+                let lastHunkEnd = -1;
+                hunks.forEach(hunk => {
+                    if (hunk.start > lastHunkEnd + 1) {
+                        const separator = document.createElement('div');
+                        separator.className = 'diff-hunk-separator';
+                        separator.textContent = '...';
+                        fragment.appendChild(separator);
+                    }
+                    for (let i = hunk.start; i <= hunk.end; i++) {
+                        const line = lines[i];
+                        if (line.type === 'inline') {
+                            appendLinesWithInlineDiff(line.removedText, line.addedText, fragment);
+                        } else {
+                            appendLinesSimple(line.text, line.type, fragment);
+                        }
+                    }
+                    lastHunkEnd = hunk.end;
+                });
+            }
+
+            updateDiffUI(fragment, toastMessage);
+        }
+
+        function preprocessDiffToLines(diff) {
+            const lines = [];
+            for (let i = 0; i < diff.length; i++) {
+                const part = diff[i], nextPart = (i + 1 < diff.length) ? diff[i + 1] : null;
+                const canDoInline = part.removed && nextPart && nextPart.added && part.value.split('\n').length <= 2 && nextPart.value.split('\n').length <= 2;
+                if (canDoInline) {
+                    lines.push({ type: 'inline', removedText: part.value, addedText: nextPart.value }); i++;
+                } else {
+                    const partType = part.added ? 'added' : (part.removed ? 'removed' : 'common');
+                    const partLines = part.value.split('\n'); if (partLines[partLines.length - 1] === '') partLines.pop();
+                    partLines.forEach(text => lines.push({ type: partType, text }));
+                }
+            }
+            return lines;
+        }
+
+        function buildHunks(lines, contextSize) {
+            const changeIndices = [];
+            lines.forEach((line, index) => { if (line.type !== 'common') changeIndices.push(index); });
+            if (changeIndices.length === 0) return [];
+            const hunks = []; let currentHunk = { start: Math.max(0, changeIndices[0] - contextSize), end: Math.min(lines.length - 1, changeIndices[0] + contextSize) };
+            for (let i = 1; i < changeIndices.length; i++) {
+                const index = changeIndices[i], startOfRange = Math.max(0, index - contextSize);
+                if (startOfRange <= currentHunk.end + 1) { currentHunk.end = Math.min(lines.length - 1, index + contextSize); } 
+                else { hunks.push(currentHunk); currentHunk = { start: startOfRange, end: Math.min(lines.length - 1, index + contextSize) }; }
+            }
+            hunks.push(currentHunk); return hunks;
+        }
+        
+        function appendLinesSimple(text, type, fragment) {
+            const className = type === 'common' ? 'diff-context' : `diff-${type}`;
+            const span = document.createElement('span'); span.className = 'diff-line ' + className;
+            const codeEl = document.createElement('code'); codeEl.textContent = text.length > 0 ? text : ' ';
+            span.appendChild(codeEl); fragment.appendChild(span);
+        }
+
+        function appendLinesWithInlineDiff(removedText, addedText, fragment) {
+            const inlineDiff = Diff.diffWordsWithSpace(removedText, addedText);
+            const addedLineEl = document.createElement('span'); addedLineEl.className = 'diff-line diff-added';
+            const removedLineEl = document.createElement('span'); removedLineEl.className = 'diff-line diff-removed';
+            inlineDiff.forEach(part => {
+                const node = document.createElement('code'); node.textContent = part.value;
+                if (part.added) { node.className = 'char-added'; addedLineEl.appendChild(node); } 
+                else if (part.removed) { node.className = 'char-removed'; removedLineEl.appendChild(node); }
+                else { addedLineEl.appendChild(node.cloneNode(true)); removedLineEl.appendChild(node.cloneNode(true)); }
+            });
+            if (removedLineEl.childNodes.length > 0) fragment.appendChild(removedLineEl);
+            if (addedLineEl.childNodes.length > 0) fragment.appendChild(addedLineEl);
+        }
+        
+        function updateDiffUI(fragment, toastMessage) {
+            elements.diffOutput.innerHTML = ''; elements.diffOutput.appendChild(fragment);
+            elements.diffOutput.querySelectorAll('code').forEach(el => hljs.highlightElement(el));
+            elements.resultControls.style.display = 'flex';
+            const diffChangeElements = Array.from(elements.diffOutput.querySelectorAll('.diff-added, .diff-removed'));
+            groupChanges(diffChangeElements);
+            if (diffChangeGroups.length > 0) {
+                elements.diffNav.style.display = 'flex'; currentChangeGroupIndex = -1; updateDiffCounter(); navigateToDiff(1);
+            } else { elements.diffNav.style.display = 'none'; }
+            showToast(toastMessage || '比對完成！');
+        }
+
+        function groupChanges(changeElements) {
+            diffChangeGroups = [];
+            for (let i = 0; i < changeElements.length; i++) {
+                const current = changeElements[i], prev = i > 0 ? changeElements[i - 1] : null;
+                if (current.classList.contains('diff-added') && prev && prev.classList.contains('diff-removed') && prev.nextSibling === current) {
+                    diffChangeGroups[diffChangeGroups.length - 1].push(current);
+                } else { diffChangeGroups.push([current]); }
+            }
+        }
+
+        function navigateToDiff(direction) {
+            if (diffChangeGroups.length === 0) return;
+            if (currentChangeGroupIndex > -1) diffChangeGroups[currentChangeGroupIndex].forEach(el => el.classList.remove('diff-active'));
+            currentChangeGroupIndex = (currentChangeGroupIndex + direction + diffChangeGroups.length) % diffChangeGroups.length;
+            const activeGroup = diffChangeGroups[currentChangeGroupIndex];
+            activeGroup.forEach(el => el.classList.add('diff-active')); activeGroup[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            updateDiffCounter();
+        }
+
+        function updateDiffCounter() { elements.diffCounter.textContent = diffChangeGroups.length > 0 ? `${currentChangeGroupIndex + 1} / ${diffChangeGroups.length}` : '0 / 0'; }
+
+        // --- EVENT LISTENERS & SETUP ---
+        function setupEditor(textArea, highlightEl, lineNumbersEl) {
+            const update = () => {
+                const text = textArea.value; highlightEl.textContent = text; hljs.highlightElement(highlightEl);
+                const lineCount = text.split('\n').length || 1; lineNumbersEl.innerHTML = Array.from({ length: lineCount }, (_, i) => `<span>${i + 1}</span>`).join('');
+            };
+            const syncScroll = () => { highlightEl.parentElement.scrollTop = textArea.scrollTop; lineNumbersEl.scrollTop = textArea.scrollTop; };
+            textArea.addEventListener('input', update); textArea.addEventListener('scroll', syncScroll); update();
+        }
+
+        function showToast(message) {
+            elements.toast.textContent = message; elements.toast.classList.add('show');
+            setTimeout(() => elements.toast.classList.remove('show'), 3000);
+        }
+
+        function handleFileUpload(event, textAreaElement) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => { textAreaElement.value = e.target.result; textAreaElement.dispatchEvent(new Event('input', { bubbles: true })); };
+            reader.readAsText(file); event.target.value = '';
+        }
+
+        // --- Init App ---
+        setupEditor(elements.originalCode, elements.originalHighlight, elements.originalLineNumbers);
+        setupEditor(elements.patchCode, elements.patchHighlight, elements.patchLineNumbers);
+
+        elements.compareBtn.addEventListener('click', runCompare);
+        
+        const triggerAutoCompare = () => {
+            clearTimeout(autoCompareTimeout);
+            if (elements.autoCompareMode.checked) autoCompareTimeout = setTimeout(runCompare, 500);
+        };
+        [elements.originalCode, elements.patchCode].forEach(el => el.addEventListener('input', triggerAutoCompare));
+        [elements.smartPatchMode, elements.autoCompareMode].forEach(el => el.addEventListener('change', triggerAutoCompare));
+
+        elements.uploadOriginalBtn.addEventListener('click', () => elements.originalFileInput.click());
+        elements.uploadPatchBtn.addEventListener('click', () => elements.patchFileInput.click());
+        elements.originalFileInput.addEventListener('change', (e) => handleFileUpload(e, elements.originalCode));
+        elements.patchFileInput.addEventListener('change', (e) => handleFileUpload(e, elements.patchCode));
+
+        elements.prevDiffBtn.addEventListener('click', () => navigateToDiff(-1));
+        elements.nextDiffBtn.addEventListener('click', () => navigateToDiff(1));
+
+        elements.clearBtn.addEventListener('click', () => {
+            elements.originalCode.value = ''; elements.patchCode.value = '';
+            elements.originalCode.dispatchEvent(new Event('input', { bubbles: true }));
+            elements.patchCode.dispatchEvent(new Event('input', { bubbles: true }));
+            elements.diffOutput.innerHTML = ''; elements.resultControls.style.display = 'none';
+            elements.diffNav.style.display = 'none';
+            mergedResult = ''; diffChangeGroups = []; currentChangeGroupIndex = -1;
+            showToast('已全部清空。');
+        });
+
+        elements.applyBtn.addEventListener('click', () => {
+            if (mergedResult) { elements.originalCode.value = mergedResult; elements.originalCode.dispatchEvent(new Event('input', { bubbles: true })); showToast('修改已成功應用！'); }
+            else { showToast('請先進行比對。'); }
+        });
+
+        elements.copyBtn.addEventListener('click', () => {
+            if (mergedResult) { navigator.clipboard.writeText(mergedResult).then(() => showToast('已複製到剪貼簿！'), () => showToast('複製失敗！')); } 
+            else { showToast('請先進行比對。'); }
+        });
+
+        elements.downloadBtn.addEventListener('click', () => {
+            if (mergedResult) {
+                const blob = new Blob([mergedResult], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'fixed_code.txt';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+                showToast('檔案已開始下載。');
+            } else { showToast('請先進行比對。'); }
+        });
+    });
+</script>
+</body>
+</html>
